@@ -1515,6 +1515,9 @@ static struct memory_stat memory_stats[] = {
 	{ "active_file", PAGE_SIZE, NR_ACTIVE_FILE },
 	{ "unevictable", PAGE_SIZE, NR_UNEVICTABLE },
 
+#ifdef CONFIG_MEMCG_BGD_RECLAIM
+	{ "bgd_reclaim", PAGE_SIZE, MEMCG_BGD_RECLAIM },
+#endif
 	/*
 	 * Note: The slab_reclaimable and slab_unreclaimable must be
 	 * together and slab_reclaimable must be in front.
@@ -2523,6 +2526,8 @@ static void memcg_reclaim_work(struct work_struct *work)
 						    GFP_KERNEL, true);
 	if (!nr_reclaimed)
 		memcg->reclaim_failures++;
+	else
+		mod_memcg_state(memcg, MEMCG_BGD_RECLAIM, nr_reclaimed);
 }
 
 static inline void queue_reclaim_work(struct mem_cgroup *memcg)
@@ -4170,6 +4175,9 @@ static const unsigned int memcg1_stats[] = {
 	NR_FILE_DIRTY,
 	NR_WRITEBACK,
 	MEMCG_SWAP,
+#ifdef CONFIG_MEMCG_BGD_RECLAIM
+	MEMCG_BGD_RECLAIM,
+#endif
 };
 
 static const char *const memcg1_stat_names[] = {
@@ -4183,6 +4191,9 @@ static const char *const memcg1_stat_names[] = {
 	"dirty",
 	"writeback",
 	"swap",
+#ifdef CONFIG_MEMCG_BGD_RECLAIM
+	"bgd_reclaim",
+#endif
 };
 
 /* Universal VM events cgroup1 shows, original sort order */
