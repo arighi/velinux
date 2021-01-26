@@ -509,6 +509,7 @@ struct kvm_vcpu_hv_synic {
 
 /* Hyper-V per vcpu emulation context */
 struct kvm_vcpu_hv {
+	struct kvm_vcpu *vcpu;
 	u32 vp_index;
 	u64 hv_vapic;
 	s64 runtime_offset;
@@ -723,7 +724,7 @@ struct kvm_vcpu_arch {
 	unsigned long singlestep_rip;
 
 	bool hyperv_enabled;
-	struct kvm_vcpu_hv hyperv;
+	struct kvm_vcpu_hv *hyperv;
 	struct kvm_vcpu_xen xen;
 
 	cpumask_var_t wbinvd_dirty_mask;
