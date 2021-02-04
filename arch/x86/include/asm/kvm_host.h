@@ -646,7 +646,7 @@ struct kvm_vcpu_arch {
 	struct kvm_cpuid_entry2 *cpuid_entries;
 	u32 kvm_cpuid_base;
 
-	unsigned long cr3_lm_rsvd_bits;
+	u64 reserved_gpa_bits;
 	int maxphyaddr;
 	int max_tdp_level;
 
