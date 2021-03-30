@@ -12,6 +12,7 @@
 #include <time.h>
 #include <linux/mman.h>
 #include <sys/syscall.h>
+#include <sys/stat.h>
 #include "linux/kernel.h"
 
 #include "test_util.h"
@@ -205,6 +206,34 @@ size_t get_backing_src_pagesz(uint32_t i)
 	default:
 		return MAP_HUGE_PAGE_SIZE(flag);
 	}
+}
+
+bool thp_configured(void)
+{
+	int ret;
+	struct stat statbuf;
+
+	ret = stat("/sys/kernel/mm/transparent_hugepage", &statbuf);
+	TEST_ASSERT(ret == 0 || (ret == -1 && errno == ENOENT),
+		    "Error in stating /sys/kernel/mm/transparent_hugepage");
+
+	return ret == 0;
+}
+
+size_t get_trans_hugepagesz(void)
+{
+	size_t size;
+	FILE *f;
+
+	TEST_ASSERT(thp_configured(), "THP is not configured in host kernel");
+
+	f = fopen("/sys/kernel/mm/transparent_hugepage/hpage_pmd_size", "r");
+	TEST_ASSERT(f != NULL, "Error in opening transparent_hugepage/hpage_pmd_size");
+
+	fscanf(f, "%ld", &size);
+	fclose(f);
+
+	return size;
 }
 
 void backing_src_help(void)
