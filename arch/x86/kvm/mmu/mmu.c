@@ -3337,12 +3337,12 @@ static int mmu_alloc_shadow_roots(struct kvm_vcpu *vcpu)
 	if (mmu->shadow_root_level == PT64_ROOT_4LEVEL) {
 		pm_mask |= PT_ACCESSED_MASK | PT_WRITABLE_MASK | PT_USER_MASK;
 
-		if (WARN_ON_ONCE(!mmu->lm_root)) {
+		if (WARN_ON_ONCE(!mmu->pml4_root)) {
 			r = -EIO;
 			goto out_unlock;
 		}
 
-		mmu->lm_root[0] = __pa(mmu->pae_root) | pm_mask;
+		mmu->pml4_root[0] = __pa(mmu->pae_root) | pm_mask;
 	}
 
 	for (i = 0; i < 4; ++i) {
@@ -3366,7 +3366,7 @@ static int mmu_alloc_shadow_roots(struct kvm_vcpu *vcpu)
 	}
 
 	if (mmu->shadow_root_level == PT64_ROOT_4LEVEL)
-		mmu->root_hpa = __pa(mmu->lm_root);
+		mmu->root_hpa = __pa(mmu->pml4_root);
 	else
 		mmu->root_hpa = __pa(mmu->pae_root);
 
@@ -3381,7 +3381,7 @@ out_unlock:
 static int mmu_alloc_special_roots(struct kvm_vcpu *vcpu)
 {
 	struct kvm_mmu *mmu = vcpu->arch.mmu;
-	u64 *lm_root, *pae_root;
+	u64 *pml4_root, *pae_root;
 
 	/*
 	 * When shadowing 32-bit or PAE NPT with 64-bit NPT, the PML4 and PDP
@@ -3400,14 +3400,14 @@ static int mmu_alloc_special_roots(struct kvm_vcpu *vcpu)
 	if (WARN_ON_ONCE(mmu->shadow_root_level != PT64_ROOT_4LEVEL))
 		return -EIO;
 
-	if (mmu->pae_root && mmu->lm_root)
+	if (mmu->pae_root && mmu->pml4_root)
 		return 0;
 
 	/*
 	 * The special roots should always be allocated in concert.  Yell and
 	 * bail if KVM ends up in a state where only one of the roots is valid.
 	 */
-	if (WARN_ON_ONCE(!tdp_enabled || mmu->pae_root || mmu->lm_root))
+	if (WARN_ON_ONCE(!tdp_enabled || mmu->pae_root || mmu->pml4_root))
 		return -EIO;
 
 	/* Unlike 32-bit NPT, the PDP table doesn't need to be in low mem. */
@@ -3415,14 +3415,14 @@ static int mmu_alloc_special_roots(struct kvm_vcpu *vcpu)
 	if (!pae_root)
 		return -ENOMEM;
 
-	lm_root = (void *)get_zeroed_page(GFP_KERNEL_ACCOUNT);
-	if (!lm_root) {
+	pml4_root = (void *)get_zeroed_page(GFP_KERNEL_ACCOUNT);
+	if (!pml4_root) {
 		free_page((unsigned long)pae_root);
 		return -ENOMEM;
 	}
 
 	mmu->pae_root = pae_root;
-	mmu->lm_root = lm_root;
+	mmu->pml4_root = pml4_root;
 
 	return 0;
 }
@@ -5382,7 +5382,7 @@ slot_handle_leaf(struct kvm *kvm, struct kvm_memory_slot *memslot,
 static void free_mmu_pages(struct kvm_mmu *mmu)
 {
 	free_page((unsigned long)mmu->pae_root);
-	free_page((unsigned long)mmu->lm_root);
+	free_page((unsigned long)mmu->pml4_root);
 }
 
 static int __kvm_mmu_create(struct kvm_vcpu *vcpu, struct kvm_mmu *mmu)
