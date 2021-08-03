@@ -2264,7 +2264,8 @@ invalid_attr:
 	return -EINVAL;
 }
 
-static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[])
+static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[],
+			    struct netlink_ext_ack *extack)
 {
 	if (dev) {
 		if (tb[IFLA_ADDRESS] &&
@@ -2286,21 +2287,17 @@ static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[])
 			rcu_read_lock();
 			af_ops = rtnl_af_lookup(nla_type(af));
 			if (!af_ops) {
-				rcu_read_unlock();
 				return -EAFNOSUPPORT;
 			}
 
 			if (!af_ops->set_link_af) {
-				rcu_read_unlock();
 				return -EOPNOTSUPP;
 			}
 
 			if (af_ops->validate_link_af) {
-				err = af_ops->validate_link_af(dev, af);
-				if (err < 0) {
-					rcu_read_unlock();
+				err = af_ops->validate_link_af(dev, af, extack);
+				if (err < 0)
 					return err;
-				}
 			}
 
 			rcu_read_unlock();
@@ -2608,7 +2605,7 @@ static int do_setlink(const struct sk_buff *skb,
 	const struct net_device_ops *ops = dev->netdev_ops;
 	int err;
 
-	err = validate_linkmsg(dev, tb);
+	err = validate_linkmsg(dev, tb, extack);
 	if (err < 0)
 		return err;
 
@@ -3297,7 +3294,7 @@ replay:
 			m_ops = master_dev->rtnl_link_ops;
 	}
 
-	err = validate_linkmsg(dev, tb);
+	err = validate_linkmsg(dev, tb, extack);
 	if (err < 0)
 		return err;
 
