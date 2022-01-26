@@ -380,6 +380,7 @@ uint64_t kvm_hypercall(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 
 struct kvm_cpuid2 *kvm_get_supported_hv_cpuid(void);
 struct kvm_cpuid2 *vcpu_get_supported_hv_cpuid(struct kvm_vm *vm, uint32_t vcpuid);
+void vm_xsave_req_perm(int bit);
 
 /*
  * Basic CPU control in CR0
