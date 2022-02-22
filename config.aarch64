@@ -8285,12 +8285,16 @@ CONFIG_PM_OPP=y
 # CONFIG_SLIMBUS is not set
 # CONFIG_INTERCONNECT is not set
 # CONFIG_COUNTER is not set
+
+#
+# ByteDance drivers support
+#
 CONFIG_BYTEDANCE=y
 CONFIG_BYTEDANCE_TRACE_IRQOFF=m
 # CONFIG_BYTEDANCE_HOOKBIND is not set
 # CONFIG_BYTEDANCE_BLACKHOLEFS is not set
 # CONFIG_BYTEDANCE_NVIDIA is not set
-# CONFIG_TTCP is not set
+# end of ByteDance drivers support
 # end of Device Drivers
 
 #
