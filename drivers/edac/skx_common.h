@@ -59,7 +59,6 @@ struct skx_dev {
 		struct mem_ctl_info *mci;
 		struct pci_dev *mdev; /* for i10nm CPU */
 		void __iomem *mbase;  /* for i10nm CPU */
-		int chan_mmio_sz;     /* for i10nm CPU */
 		u8 mc;	/* system wide mc# */
 		u8 lmc;	/* socket relative mc# */
 		u8 src_id, node_id;
@@ -83,8 +82,7 @@ struct skx_pvt {
 
 enum type {
 	SKX,
-	I10NM,
-	SPR
+	I10NM
 };
 
 enum {
@@ -120,13 +118,9 @@ struct res_config {
 	unsigned int decs_did;
 	/* Default bus number configuration register offset */
 	int busno_cfg_offset;
-	/* Per DDR channel memory-mapped I/O size */
-	int ddr_chan_mmio_sz;
-	bool support_ddr5;
 };
 
-typedef int (*get_dimm_config_f)(struct mem_ctl_info *mci,
-				 struct res_config *cfg);
+typedef int (*get_dimm_config_f)(struct mem_ctl_info *mci);
 typedef bool (*skx_decode_f)(struct decoded_addr *res);
 typedef void (*skx_show_retry_log_f)(struct decoded_addr *res, char *msg, int len);
 
@@ -142,16 +136,14 @@ int skx_get_all_bus_mappings(struct res_config *cfg, struct list_head **list);
 int skx_get_hi_lo(unsigned int did, int off[], u64 *tolm, u64 *tohm);
 
 int skx_get_dimm_info(u32 mtr, u32 mcmtr, u32 amap, struct dimm_info *dimm,
-		      struct skx_imc *imc, int chan, int dimmno,
-		      struct res_config *cfg);
+		      struct skx_imc *imc, int chan, int dimmno);
 
 int skx_get_nvdimm_info(struct dimm_info *dimm, struct skx_imc *imc,
 			int chan, int dimmno, const char *mod_str);
 
 int skx_register_mci(struct skx_imc *imc, struct pci_dev *pdev,
 		     const char *ctl_name, const char *mod_str,
-		     get_dimm_config_f get_dimm_config,
-		     struct res_config *cfg);
+		     get_dimm_config_f get_dimm_config);
 
 int skx_mce_check_error(struct notifier_block *nb, unsigned long val,
 			void *data);
