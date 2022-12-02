@@ -1935,7 +1935,7 @@ retry:
 		h->free_huge_pages--;
 		h->free_huge_pages_node[nid]--;
 		h->max_huge_pages--;
-		ClearPageHugeFreed(page);
+		ClearPageHugeFreed(head);
 		spin_unlock(&hugetlb_lock);
 
 		/*
