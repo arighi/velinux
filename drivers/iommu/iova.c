@@ -214,7 +214,7 @@ retry:
 	if (high_pfn < size || new_pfn < low_pfn) {
 		if (low_pfn == iovad->start_pfn && retry_pfn < limit_pfn) {
 			high_pfn = limit_pfn;
-			low_pfn = retry_pfn;
+			low_pfn = retry_pfn + 1;
 			curr = &iovad->anchor.node;
 			curr_iova = rb_entry(curr, struct iova, node);
 			goto retry;
