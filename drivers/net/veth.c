@@ -83,6 +83,7 @@ struct veth_sq {
 	struct {
 		struct xsk_buff_pool __rcu *pool;
 		u32 last_cpu;
+		u64 last_jiffies;
 	} xsk;
 };
 
@@ -1450,6 +1451,7 @@ static int veth_alloc_queues(struct net_device *dev)
 
 	for (i = 0; i < dev->num_tx_queues; i++) {
 		priv->sq[i].dev = dev;
+		priv->sq[i].xsk.last_cpu = U32_MAX;
 		u64_stats_init(&priv->sq[i].stats.syncp);
 	}
 
@@ -1578,6 +1580,53 @@ out:
 	rcu_read_unlock();
 }
 
+static void veth_xsk_remote_trigger_napi(void *info)
+{
+	struct veth_sq *sq = info;
+
+	napi_schedule(&sq->xdp_napi);
+}
+
+static int veth_xsk_wakeup(struct net_device *dev, u32 qid, u32 flag)
+{
+	struct veth_priv *priv;
+	u32 last_cpu, cur_cpu;
+	struct veth_sq *sq;
+	u64 now = 0;
+
+	if (!netif_running(dev))
+		return -ENETDOWN;
+
+	if (qid >= dev->real_num_rx_queues)
+		return -EINVAL;
+
+	priv = netdev_priv(dev);
+	sq = &priv->sq[qid];
+
+	if (napi_if_scheduled_mark_missed(&sq->xdp_napi))
+		return 0;
+
+	last_cpu = sq->xsk.last_cpu;
+	cur_cpu = get_cpu();
+
+	/*  raise a napi */
+	if (last_cpu == cur_cpu || last_cpu == U32_MAX) {
+		sq->xsk.last_jiffies = get_jiffies_64();
+		local_bh_disable();
+		napi_schedule(&sq->xdp_napi);
+		local_bh_enable();
+	} else {
+		now = get_jiffies_64();
+		if (time_after64(now, sq->xsk.last_jiffies + HZ))
+			last_cpu = cur_cpu;
+
+		smp_call_function_single(last_cpu, veth_xsk_remote_trigger_napi, sq, false);
+	}
+
+	put_cpu();
+	return 0;
+}
+
 static int veth_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 			struct netlink_ext_ack *extack)
 {
@@ -1677,6 +1726,7 @@ static int veth_xsk_pool_enable(struct net_device *dev, struct xsk_buff_pool *po
 	 * is safe.
 	 */
 	rcu_assign_pointer(priv->sq[qid].xsk.pool, pool);
+	priv->sq[qid].xsk.last_cpu = U32_MAX;
 
 	veth_napi_add_tx(dev);
 
@@ -1694,6 +1744,7 @@ static int veth_xsk_pool_disable(struct net_device *dev, u16 qid)
 	veth_disable_xdp(priv->peer);
 	veth_napi_del_tx(dev);
 
+	priv->sq[qid].xsk.last_cpu = U32_MAX;
 	rcu_assign_pointer(priv->sq[qid].xsk.pool, NULL);
 	return err;
 }
@@ -1736,6 +1787,7 @@ static const struct net_device_ops veth_netdev_ops = {
 	.ndo_set_rx_headroom	= veth_set_rx_headroom,
 	.ndo_bpf		= veth_xdp,
 	.ndo_xdp_xmit		= veth_ndo_xdp_xmit,
+	.ndo_xsk_wakeup		= veth_xsk_wakeup,
 	.ndo_get_peer_dev	= veth_peer_dev,
 };
 
