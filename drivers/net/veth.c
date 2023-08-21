@@ -48,6 +48,9 @@ struct veth_stats {
 	u64	xdp_drops;
 	u64	xdp_tx;
 	u64	xdp_tx_err;
+	u64	xdp_tx_batch;
+	u64	xdp_tx_batch_err;
+	u64	xdp_tx_batch_err_desc_num;
 	u64	peer_tq_xdp_xmit;
 	u64	peer_tq_xdp_xmit_err;
 };
@@ -169,6 +172,17 @@ static const struct veth_q_stat_desc veth_tq_stats_desc[] = {
 
 #define VETH_TQ_STATS_LEN	ARRAY_SIZE(veth_tq_stats_desc)
 
+static const struct veth_q_stat_desc veth_sq_stats_desc[] = {
+	{ "packets",		VETH_RQ_STAT(xdp_packets) },
+	{ "bytes",		VETH_RQ_STAT(xdp_bytes) },
+	{ "tx_error",	VETH_RQ_STAT(xdp_tx_err) },
+	{ "tx_batch",	VETH_RQ_STAT(xdp_tx_batch) },
+	{ "tx_batch_err",	VETH_RQ_STAT(xdp_tx_batch_err) },
+	{ "tx_batch_err_num",	VETH_RQ_STAT(xdp_tx_batch_err_desc_num) },
+};
+
+#define VETH_SQ_STATS_LEN	ARRAY_SIZE(veth_sq_stats_desc)
+
 static struct {
 	const char string[ETH_GSTRING_LEN];
 } ethtool_stats_keys[] = {
@@ -209,6 +223,14 @@ static void veth_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
 			}
 		}
 		for (i = 0; i < dev->real_num_tx_queues; i++) {
+			for (j = 0; j < VETH_SQ_STATS_LEN; j++) {
+				snprintf(p, ETH_GSTRING_LEN,
+					 "xsk_%u_%.18s",
+					 i, veth_sq_stats_desc[j].desc);
+				p += ETH_GSTRING_LEN;
+			}
+		}
+		for (i = 0; i < dev->real_num_tx_queues; i++) {
 			for (j = 0; j < VETH_TQ_STATS_LEN; j++) {
 				snprintf(p, ETH_GSTRING_LEN,
 					 "tx_queue_%u_%.18s",
@@ -226,6 +248,7 @@ static int veth_get_sset_count(struct net_device *dev, int sset)
 	case ETH_SS_STATS:
 		return ARRAY_SIZE(ethtool_stats_keys) +
 		       VETH_RQ_STATS_LEN * dev->real_num_rx_queues +
+		       VETH_SQ_STATS_LEN * dev->real_num_tx_queues +
 		       VETH_TQ_STATS_LEN * dev->real_num_tx_queues;
 	default:
 		return -EOPNOTSUPP;
@@ -255,6 +278,23 @@ static void veth_get_ethtool_stats(struct net_device *dev,
 			}
 		} while (u64_stats_fetch_retry_irq(&rq_stats->syncp, start));
 		idx += VETH_RQ_STATS_LEN;
+	}
+
+	for (i = 0; i < dev->real_num_tx_queues; i++) {
+		const struct veth_sq_stats *sq_stats = &priv->sq[i].stats;
+		const void *stats_base = (void *)&sq_stats->vs;
+		unsigned int start, sq_idx = idx;
+		size_t offset;
+
+		sq_idx += (i % dev->real_num_tx_queues) * VETH_SQ_STATS_LEN;
+		do {
+			start = u64_stats_fetch_begin_irq(&sq_stats->syncp);
+			for (j = 0; j < VETH_SQ_STATS_LEN; j++) {
+				offset = veth_sq_stats_desc[j].offset;
+				data[sq_idx + j] = *(u64 *)(stats_base + offset);
+			}
+		} while (u64_stats_fetch_retry_irq(&sq_stats->syncp, start));
+		idx += VETH_SQ_STATS_LEN;
 	}
 
 	if (!peer)
@@ -1476,10 +1516,18 @@ static int veth_xsk_tx_xmit(struct veth_sq *sq, struct xsk_buff_pool *xsk_pool, 
 		veth_xsk_control_msg_prase(xsk_pool, &desc);
 		hi->xsk = xsk;
 
-		if (hi->batch_head)
+		if (hi->batch_head) {
+			stats.xdp_tx_batch++;
+			if (hi->batch_num > MAX_SKB_FRAGS)
+				stats.xdp_tx_batch_err_desc_num++;
+
 			skb = veth_build_skb_batch(peer_dev, xsk_pool, &desc);
-		else
+
+			if (hi->batch_num != (hi->real_desc_num + 1))
+				stats.xdp_tx_batch_err++;
+		} else {
 			skb = veth_build_skb_def(peer_dev, xsk_pool, &desc);
+		}
 
 		if (!skb) {
 			stats.xdp_tx_err++;
@@ -1512,6 +1560,9 @@ static int veth_xsk_tx_xmit(struct veth_sq *sq, struct xsk_buff_pool *xsk_pool, 
 	sq->stats.vs.xdp_packets += done;
 	sq->stats.vs.xdp_bytes += stats.xdp_bytes;
 	sq->stats.vs.xdp_tx_err += stats.xdp_tx_err;
+	sq->stats.vs.xdp_tx_batch += stats.xdp_tx_batch;
+	sq->stats.vs.xdp_tx_batch_err += stats.xdp_tx_batch_err;
+	sq->stats.vs.xdp_tx_batch_err_desc_num += stats.xdp_tx_batch_err_desc_num;
 	u64_stats_update_end(&sq->stats.syncp);
 
 	return done;
