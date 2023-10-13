@@ -32,6 +32,7 @@
 #include <trace/events/xdp.h>
 
 #define TX_BATCH_SIZE 16
+#define MAX_PER_SOCKET_BUDGET (TX_BATCH_SIZE)
 
 static DEFINE_PER_CPU(struct list_head, xskmap_flush_list);
 
@@ -321,14 +322,23 @@ EXPORT_SYMBOL(xsk_tx_release);
 
 bool xsk_tx_peek_desc(struct xsk_buff_pool *pool, struct xdp_desc *desc)
 {
+	bool budget_exhausted = false;
 	struct xdp_sock *xs;
 
 	rcu_read_lock();
+again:
 	list_for_each_entry_rcu(xs, &pool->xsk_tx_list, tx_list) {
+		if (xs->tx_budget_spent >= MAX_PER_SOCKET_BUDGET) {
+			budget_exhausted = true;
+			continue;
+		}
+
 		if (!xskq_cons_peek_desc(xs->tx, desc, pool)) {
 			xs->tx->queue_empty_descs++;
 			continue;
 		}
+
+		xs->tx_budget_spent++;
 
 		/* This is the backpressure mechanism for the Tx path.
 		 * Reserve space in the completion queue and only proceed
@@ -341,6 +351,14 @@ bool xsk_tx_peek_desc(struct xsk_buff_pool *pool, struct xdp_desc *desc)
 		xskq_cons_release(xs->tx);
 		rcu_read_unlock();
 		return true;
+	}
+
+	if (budget_exhausted) {
+		list_for_each_entry_rcu(xs, &pool->xsk_tx_list, tx_list)
+			xs->tx_budget_spent = 0;
+
+		budget_exhausted = false;
+		goto again;
 	}
 
 out:
@@ -357,19 +375,28 @@ static inline u32 xskq_cons_present_entries_tmp(struct xsk_queue *q)
 
 bool xsk_tx_peek_desc_sock(struct xsk_buff_pool *pool, struct xdp_desc *desc, struct xdp_sock **xsk)
 {
+	bool budget_exhausted = false;
 	struct xdp_sock *xs;
 	u32 cq_len = 0;
 	u32 tx_len = 0;
 
 	rcu_read_lock();
+again:
 	list_for_each_entry_rcu(xs, &pool->xsk_tx_list, tx_list) {
 		if (xsk && *xsk && xs != *xsk)
 			continue;
+
+		if (xsk && !*xsk && xs->tx_budget_spent >= MAX_PER_SOCKET_BUDGET) {
+			budget_exhausted = true;
+			continue;
+		}
 
 		if (!xskq_cons_peek_desc(xs->tx, desc, pool)) {
 			xs->tx->queue_empty_descs++;
 			continue;
 		}
+
+		xs->tx_budget_spent++;
 
 		if (xsk)
 			*xsk = xs;
@@ -390,6 +417,14 @@ bool xsk_tx_peek_desc_sock(struct xsk_buff_pool *pool, struct xdp_desc *desc, st
 		xskq_cons_release(xs->tx);
 		rcu_read_unlock();
 		return true;
+	}
+
+	if (budget_exhausted) {
+		list_for_each_entry_rcu(xs, &pool->xsk_tx_list, tx_list)
+			xs->tx_budget_spent = 0;
+
+		budget_exhausted = false;
+		goto again;
 	}
 
 out:
