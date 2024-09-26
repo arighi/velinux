@@ -1,5 +1,5 @@
 variables:
   BaseBranch: 5.10.200-1-velinux
-  CI_KERNEL_VERSION: 5.10.200-1-velinux1
+  CI_KERNEL_VERSION: 5.10.200-1-velinux1u1
 
 include: 'https://sysrepo.byted.org/kernel-ci/kernel-ci/raw/master/gitlab-ci.yml'
