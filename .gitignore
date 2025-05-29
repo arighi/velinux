@@ -74,13 +74,12 @@ modules.order
 #
 # RPM spec file (make rpm-pkg)
 #
-/kernel.spec
 /rpmbuild/
 
 #
 # Debian directory (make deb-pkg)
 #
-/debian/
+#/debian/
 
 #
 # Snap directory (make snap-pkg)
@@ -97,6 +96,7 @@ modules.order
 #
 !.clang-format
 !.cocciconfig
+!.editorconfig
 !.get_maintainer.ignore
 !.gitattributes
 !.gitignore
