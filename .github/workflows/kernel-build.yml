@@ -43,6 +43,19 @@ jobs:
           VNG_PACKAGE=1 BUILD_VIRTME_NG_INIT=1 pip install --break-system-packages .
           cd -
 
+      - name: Configure Kernel
+        run: |
+          if [ "${{ matrix.config }}" = "defconfig" ]; then
+            vng -vb --kconfig
+          else
+            vng -vb --kconfig --config .github/workflows/${{ matrix.config }} --arch arm64 CROSS_COMPILE=aarch64-linux-gnu- ARCH=arm64
+          fi
+          # Ensure WERROR is disabled
+          ./scripts/config --disable CONFIG_WERROR
+          # Disable certificate verification
+          ./scripts/config --disable SYSTEM_TRUSTED_KEYS
+          ./scripts/config --disable SYSTEM_REVOCATION_KEYS ""
+
       - name: Build Kernel
         run: |
           if [ "${{ matrix.config }}" = "defconfig" ]; then
