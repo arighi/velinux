@@ -2020,8 +2020,7 @@ static int vdpa_dev_add(struct vdpa_mgmt_dev *mdev, const char *name,
 	return 0;
 }
 
-static void vdpa_dev_del(struct vdpa_mgmt_dev *mdev,
-			 struct vdpa_device *dev, int timeout)
+static void vdpa_dev_del(struct vdpa_mgmt_dev *mdev, struct vdpa_device *dev)
 {
 	_vdpa_unregister_device(dev);
 }
